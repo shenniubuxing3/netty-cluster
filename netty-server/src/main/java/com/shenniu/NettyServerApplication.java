@@ -3,11 +3,13 @@ package com.shenniu;
 import com.shenniu.ChannelHandlers.SocketHandler;
 import com.shenniu.ChannelHandlers.WebSocketHandler;
 import com.shenniu.ChannelHandlers.WebSocketHandler01;
+import configutils.ConfigHelper;
 import nettyutils.server.ServerBootstrapHelper;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
+import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -26,13 +28,14 @@ public class NettyServerApplication implements CommandLineRunner {
     }
 
     void test2() {
+        Properties conf = ConfigHelper.getHelper().load();
         for (int i = 0; i <= 5; i++) {
             int finalI = i;
             new Thread(() -> {
                 ServerBootstrapHelper helper = new ServerBootstrapHelper(
                         1980 + finalI,
                         pip -> pip.addLast(new SocketHandler()),
-                        "192.168.181.19:2181");
+                        conf.getProperty("shenniu003.zk.link"));
                 helper.run();
             }).start();
         }

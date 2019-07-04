@@ -1,10 +1,13 @@
 package com.shenniu;
 
 import com.shenniu.ChannelHandlers.SocketHandler;
+import configutils.ConfigHelper;
 import nettyutils.client.BootstrapHelper;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+import java.util.Properties;
 
 @SpringBootApplication
 public class NettyClientApplication implements CommandLineRunner {
@@ -20,9 +23,12 @@ public class NettyClientApplication implements CommandLineRunner {
     }
 
     void test01() throws Exception {
-        BootstrapHelper helper = new BootstrapHelper("192.168.181.19:2181", b -> {
-            b.addLast(new SocketHandler());
-        });
+        Properties conf = ConfigHelper.getHelper().load();
+        BootstrapHelper helper = new BootstrapHelper(
+                conf.getProperty("shenniu003.zk.link"),
+                b -> {
+                    b.addLast(new SocketHandler());
+                });
         helper.run();
     }
 }

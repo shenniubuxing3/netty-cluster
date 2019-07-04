@@ -7,7 +7,7 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.channel.socket.nio.NioSocketChannel;
 import org.apache.logging.log4j.util.Strings;
 import org.springframework.util.CollectionUtils;
 import zkutils.PollRqDto;
@@ -93,7 +93,7 @@ public class BootstrapHelper {
             }
             PollServerDto serverDto = JSON.parseObject(optional.get().getData().toString(), PollServerDto.class);
             if (serverDto == null) {
-                throw new Exception("server info is error");
+                throw new Exception("client version is lower");
             }
             this.ip = serverDto.getIp();
             this.port = serverDto.getPort();
@@ -108,11 +108,11 @@ public class BootstrapHelper {
         try {
             Bootstrap bootstrap = new Bootstrap();
             bootstrap.group(workGroup).
-                    channel(NioServerSocketChannel.class).
-                    handler(new ChannelSocketHelper(this.consumer)).
+                    channel(NioSocketChannel.class).
                     option(ChannelOption.SO_BACKLOG, 1024).
-                    option(ChannelOption.SO_KEEPALIVE, true);
-            ChannelFuture channelFuture = bootstrap.connect("192.168.181.19", this.port).sync();
+                    option(ChannelOption.SO_KEEPALIVE, true).
+                    handler(new ChannelSocketHelper(this.consumer));
+            ChannelFuture channelFuture = bootstrap.connect(this.ip, this.port).sync();
 
             //order consumer
             if (Objects.nonNull(this.channelFutureConsumer)) {
