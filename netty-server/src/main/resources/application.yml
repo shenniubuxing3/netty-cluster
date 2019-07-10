@@ -1,2 +1,2 @@
 server:
-  port: ${random.int[2101,2199]}
+  port: ${random.int[2100,2199]}
