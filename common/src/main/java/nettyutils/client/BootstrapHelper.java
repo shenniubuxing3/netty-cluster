@@ -11,13 +11,15 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import org.apache.logging.log4j.util.Strings;
 import org.springframework.util.CollectionUtils;
 import zkutils.PollRqDto;
-import zkutils.PollServerDto;
 import zkutils.ZkHelper;
+import zkutils.ZkRqDto;
 
+import java.io.IOException;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
@@ -52,13 +54,8 @@ public class BootstrapHelper {
      * @param zkString
      * @param consumer
      */
-    public BootstrapHelper(String zkString, Consumer<ChannelPipeline> consumer) throws Exception {
-        this(zkString, "", consumer);
-    }
-
-    public BootstrapHelper(String zkString, String zkRootNode, Consumer<ChannelPipeline> consumer) throws Exception {
-        this(zkString, zkRootNode, consumer, 99, b -> {
-        });
+    public BootstrapHelper(String zkString, Consumer<ChannelPipeline> consumer, Consumer<ChannelFuture> channelFutureConsumer) throws Exception {
+        this(zkString, "", consumer, 99, channelFutureConsumer);
     }
 
     public BootstrapHelper(String ip, int port, Consumer<ChannelPipeline> consumer, String zkString, String zkRootNode) throws Exception {
@@ -82,28 +79,13 @@ public class BootstrapHelper {
         this.zkString = zkString;
         this.zkRootNode = zkRootNode;
 
-        if (Strings.isEmpty(this.zkRootNode)) {
-            this.zkRootNode = "/netty_server";
-        }
-
-        if (Strings.isNotEmpty(this.zkString)) {
-            Optional<PollRqDto> optional = this.selectServer(3, 10, TimeUnit.SECONDS);
-            if (!optional.isPresent()) {
-                throw new Exception("server is not exist");
-            }
-            PollServerDto serverDto = JSON.parseObject(optional.get().getData().toString(), PollServerDto.class);
-            if (serverDto == null) {
-                throw new Exception("client version is lower");
-            }
-            this.ip = serverDto.getIp();
-            this.port = serverDto.getPort();
-        }
+        discoverIp(3, 10);
     }
 
     /**
      * netty启动
      */
-    public void run() {
+    public void run() throws Exception {
         EventLoopGroup workGroup = new NioEventLoopGroup(this.workGroup);
         try {
             Bootstrap bootstrap = new Bootstrap();
@@ -113,7 +95,6 @@ public class BootstrapHelper {
                     option(ChannelOption.SO_KEEPALIVE, true).
                     handler(new ChannelSocketHelper(this.consumer));
             ChannelFuture channelFuture = bootstrap.connect(this.ip, this.port).sync();
-
             //order consumer
             if (Objects.nonNull(this.channelFutureConsumer)) {
                 this.channelFutureConsumer.accept(channelFuture);
@@ -124,11 +105,56 @@ public class BootstrapHelper {
         } finally {
             workGroup.shutdownGracefully();
             System.out.println(String.format("client connect %s:%s is end", this.ip, this.port));
+            //retry
+            registerRetry();
         }
     }
 
     /**
-     * 发现zk服务上的最少统计数的server信息
+     * client discover server Ip
+     * @param loop
+     * @param time
+     * @throws Exception
+     */
+    void discoverIp(int loop, long time) throws Exception {
+        if (Strings.isEmpty(this.zkRootNode)) {
+            this.zkRootNode = "/netty_server";
+        }
+        if (Strings.isNotEmpty(this.zkString)) {
+            Optional<PollRqDto> optional = this.selectServer(loop, time, TimeUnit.SECONDS);
+            if (!optional.isPresent()) {
+                throw new Exception("server is not exist");
+            }
+            ZkRqDto zkRqDto = JSON.parseObject(optional.get().getData().toString(), ZkRqDto.class);
+            if (zkRqDto == null) {
+                throw new Exception("client version is lower");
+            }
+            this.ip = zkRqDto.getIp();
+            this.port = zkRqDto.getPort();
+        }
+    }
+
+    /**
+     * registerRetry 60 price
+     *
+     * @throws Exception
+     */
+    void registerRetry() throws Exception {
+        Executors.newSingleThreadExecutor().execute(() -> {
+            try {
+                System.out.println("init retry...");
+                //discoverIp
+                discoverIp(60, 30);
+                //restart
+                run();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+    }
+
+    /**
+     * discover zk server less load banlance info
      */
     Optional<PollRqDto> discoverServer() {
         if (Strings.isEmpty(this.zkString) || Strings.isEmpty(this.zkRootNode)) {
@@ -150,14 +176,14 @@ public class BootstrapHelper {
     }
 
     /**
-     * 发现server信息策略
+     * discover server policy
      *
-     * @param loop     重试次数
-     * @param time     间隔时间
-     * @param timeUnit 间隔时间单位
+     * @param loop     retry num
+     * @param time     time
+     * @param timeUnit unit
      * @return
      */
-    Optional<PollRqDto> selectServer(int loop, long time, TimeUnit timeUnit) {
+    Optional<PollRqDto> selectServer(int loop, long time, TimeUnit timeUnit) throws IOException {
         Optional<PollRqDto> opt = Optional.empty();
         for (int i = 0; i < loop; i++) {
             opt = this.discoverServer();
@@ -165,6 +191,7 @@ public class BootstrapHelper {
                 break;
             }
             try {
+                System.out.println("discover Server ip ...");
                 timeUnit.sleep(time);
             } catch (InterruptedException e) {
                 e.printStackTrace();

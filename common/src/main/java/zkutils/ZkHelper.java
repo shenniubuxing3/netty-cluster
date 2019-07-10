@@ -34,7 +34,7 @@ public class ZkHelper implements Closeable {
         init();
     }
 
-    private void init() throws IOException {
+    public void init() throws IOException {
         this.zooKeeper = new ZooKeeper(this.connectString, this.timeOut, this.watcher);
     }
 
@@ -242,6 +242,12 @@ public class ZkHelper implements Closeable {
                 min(Comparator.comparing(PollRqDto::getPoolNum)).orElse(new PollRqDto());
     }
 
+    public <T> T getPoll(String path, Watcher watcher, Class<T> tClass) {
+        byte[] bb = this.getData(path, watcher);
+        String val = new String(bb, StandardCharsets.UTF_8);
+        return JSON.parseObject(val, tClass);
+    }
+
     public boolean setPollChild(String path, String content) throws KeeperException, InterruptedException {
         return this.zooKeeper.setData(path, content.getBytes(StandardCharsets.UTF_8), -1) != null;
     }
@@ -260,3 +266,4 @@ public class ZkHelper implements Closeable {
     }
 
 }
+

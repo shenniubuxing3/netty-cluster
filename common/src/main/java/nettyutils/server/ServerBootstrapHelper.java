@@ -8,9 +8,7 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import org.apache.logging.log4j.util.Strings;
-import org.apache.zookeeper.Watcher;
-import zkutils.PollServerDto;
-import zkutils.ZkHelper;
+import zkutils.ZkRqDto;
 
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -99,7 +97,8 @@ public class ServerBootstrapHelper {
                 bootstrap.childHandler(new ChannelWebSocketHelper(this.consumer, this.webSocketPath));
             } else {
                 //socket
-                bootstrap.childHandler(new ChannelSocketHelper(this.consumer));
+                ZkRqDto zkRqDto = new ZkRqDto(this.zkString, this.zkRootNode, this.ip, this.port);
+                bootstrap.childHandler(new ChannelSocketHelper(this.consumer, zkRqDto));
             }
             bootstrap.option(ChannelOption.SO_BACKLOG, 1024).childOption(ChannelOption.SO_KEEPALIVE, true);
             ChannelFuture channelFuture = bootstrap.bind(this.port).sync();
@@ -108,9 +107,6 @@ public class ServerBootstrapHelper {
             if (Objects.nonNull(this.channelFutureConsumer)) {
                 this.channelFutureConsumer.accept(channelFuture);
             }
-            //add linstenr
-            this.addListener(channelFuture);
-
             channelFuture.channel().closeFuture().sync();
         } catch (Exception ex) {
             ex.printStackTrace();
@@ -118,62 +114,6 @@ public class ServerBootstrapHelper {
             workGroup.shutdownGracefully();
             bossGroup.shutdownGracefully();
             System.out.println(String.format("server %s:%s is end", this.ip, this.port));
-        }
-    }
-
-    /**
-     * 添加事件监听
-     *
-     * @param channelFuture
-     */
-    void addListener(ChannelFuture channelFuture) {
-        channelFuture.addListener(future -> {
-            //register zk
-            this.registerZk(channelFuture);
-        });
-    }
-
-    /**
-     * 启动zk注册功能
-     */
-    void registerZk(ChannelFuture channelFuture) {
-        if (Strings.isEmpty(this.zkString) || Strings.isEmpty(this.zkRootNode)) {
-            return;
-        }
-        boolean isClose = false;
-        try {
-            ZkHelper zkHelper = new ZkHelper(this.zkString, b -> {
-                System.out.println("zk status is " + b.getState());
-            });
-            //create rootnode
-            String rootPath = zkHelper.createPersistentFolder(this.zkRootNode, false);
-
-            //create node = register ip+port
-            StringBuilder node = new StringBuilder().append(this.ip).append(":").append(this.port);
-            PollServerDto serverDto = new PollServerDto();
-            serverDto.setIp(this.ip);
-            serverDto.setPort(this.port);
-            String nodePath = zkHelper.createPoll(rootPath + "/" + node, serverDto);
-            if (Strings.isEmpty(nodePath)) {
-                isClose = true;
-                return;
-            }
-            System.out.println(String.format("server %s:%s is start", this.ip, this.port));
-            System.out.println("server is register zk nodePath：" + nodePath);
-            //listener event
-            zkHelper.getData(nodePath.toString(), b -> {
-                if (b.getType() == Watcher.Event.EventType.NodeDeleted) {
-                    System.out.println("zk nodePath：" + nodePath + " is " + b.getType());
-                    channelFuture.channel().close();
-                }
-            });
-        } catch (Exception ex) {
-            isClose = true;
-            ex.printStackTrace();
-        } finally {
-            if (isClose) {
-                channelFuture.channel().close();
-            }
         }
     }
 }

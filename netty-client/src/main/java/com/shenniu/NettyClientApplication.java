@@ -19,15 +19,17 @@ public class NettyClientApplication implements CommandLineRunner {
     @Override
     public void run(String... strings) throws Exception {
         test01();
-
     }
 
     void test01() throws Exception {
         Properties conf = ConfigHelper.getHelper().load();
         BootstrapHelper helper = new BootstrapHelper(
                 conf.getProperty("shenniu003.zk.link"),
-                b -> {
-                    b.addLast(new SocketHandler());
+                pipeline -> {
+                    pipeline.addLast(new SocketHandler());
+                },
+                channelFuture -> {
+
                 });
         helper.run();
     }

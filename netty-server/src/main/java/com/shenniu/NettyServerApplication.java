@@ -4,17 +4,27 @@ import com.shenniu.ChannelHandlers.SocketHandler;
 import com.shenniu.ChannelHandlers.WebSocketHandler;
 import com.shenniu.ChannelHandlers.WebSocketHandler01;
 import configutils.ConfigHelper;
+import io.netty.channel.group.ChannelGroup;
+import io.netty.channel.group.DefaultChannelGroup;
+import io.netty.util.concurrent.GlobalEventExecutor;
+import nettyutils.extend.DataExtend;
 import nettyutils.server.ServerBootstrapHelper;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 @SpringBootApplication
 public class NettyServerApplication implements CommandLineRunner {
+
+    //全局通知
+    public static ChannelGroup channelGroup = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE);
 
     public static void main(String[] args) {
         SpringApplication.run(NettyServerApplication.class, args);
@@ -29,7 +39,7 @@ public class NettyServerApplication implements CommandLineRunner {
 
     void test2() {
         Properties conf = ConfigHelper.getHelper().load();
-        for (int i = 0; i <= 5; i++) {
+        for (int i = 0; i <= 3; i++) {
             int finalI = i;
             new Thread(() -> {
                 ServerBootstrapHelper helper = new ServerBootstrapHelper(
@@ -39,6 +49,19 @@ public class NettyServerApplication implements CommandLineRunner {
                 helper.run();
             }).start();
         }
+
+        //全局公告
+        new Thread(() -> {
+            while (true) {
+                channelGroup.writeAndFlush(
+                        DataExtend.getBbByString("[服务器信息]：时间 -- " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))));
+                try {
+                    TimeUnit.MINUTES.sleep(1);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }).start();
     }
 
     void test0() {
