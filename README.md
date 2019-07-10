@@ -1,5 +1,4 @@
-# netty-cluster
-netty+zk高可用
+# netty-cluster netty+zk高可用
 
 zk配置
 
